@@ -1,0 +1,47 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fixture plugin
+        run: |
+          mkdir -p fixture/.claude-plugin fixture/.github fixture/skills/foo fixture/skills/bar/scripts
+          echo '{"name":"demo","version":"0.1.0"}' > fixture/.claude-plugin/plugin.json
+          echo foo > fixture/skills/foo/SKILL.md
+          echo bar > fixture/skills/bar/SKILL.md
+          printf '#!/bin/sh\necho hi\n' > fixture/skills/bar/scripts/run.sh
+          chmod +x fixture/skills/bar/scripts/run.sh
+          echo ci > fixture/.github/ci.yml
+          git -c user.name=ci -c user.email=ci@example.com add fixture
+          git -c user.name=ci -c user.email=ci@example.com commit -qm fixture
+
+      - id: bundle
+        uses: ./
+        with:
+          plugin-path: fixture
+          per-skill: true
+          create-release: false
+
+      - name: Verify
+        env:
+          TAG: ${{ steps.bundle.outputs.tag }}
+          PLUGIN_ZIP: ${{ steps.bundle.outputs.plugin-zip }}
+          SKILLS_ZIP: ${{ steps.bundle.outputs.skills-zip }}
+        run: |
+          set -x
+          test "$TAG" = v0.1.0
+          test "$(basename "$PLUGIN_ZIP")" = demo-0.1.0.zip
+          test "$(basename "$SKILLS_ZIP")" = demo-skills-0.1.0.zip
+          unzip -Z1 "$PLUGIN_ZIP" | grep -qx 'demo/.claude-plugin/plugin.json'
+          if unzip -Z1 "$PLUGIN_ZIP" | grep -q '\.github'; then exit 1; fi
+          unzip -Z1 "$SKILLS_ZIP" | grep -qx 'skills/foo/SKILL.md'
+          unzip -Z1 dist/bar.zip | grep -qx 'bar/scripts/run.sh'
+          unzip -Z dist/bar.zip | grep 'bar/scripts/run.sh' | grep -q '^-rwx'

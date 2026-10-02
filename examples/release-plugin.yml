@@ -1,0 +1,19 @@
+# プラグインのリポジトリに .github/workflows/release-plugin.yml として置く
+name: Release plugin
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DIO0550/skill-bundle-action@v1
+        with:
+          per-skill: true

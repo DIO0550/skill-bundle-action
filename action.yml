@@ -1,0 +1,92 @@
+name: Skill Bundle
+description: Claude Code プラグインを zip 化し（プラグイン全体 / skills のみ / skill 単体）、GitHub Release に添付する
+author: DIO0550
+branding:
+  icon: package
+  color: orange
+
+inputs:
+  plugin-path:
+    description: プラグインのルートディレクトリ（リポジトリルートからの相対パス）
+    default: "."
+  skills-path:
+    description: skills ディレクトリ（plugin-path からの相対パス）。存在しなければ skills zip は作らない
+    default: "skills"
+  name:
+    description: zip ファイル名に使う名前。省略時は .claude-plugin/plugin.json の name、無ければリポジトリ名
+    default: ""
+  version:
+    description: バージョン。省略時は .claude-plugin/plugin.json の version
+    default: ""
+  tag:
+    description: リリースタグ。省略時は v<version>、version も無ければ build-<日付>-<短縮SHA>
+    default: ""
+  per-skill:
+    description: "true のとき skill ごとの zip（<skill名>.zip）も作る（claude.ai へのアップロード用）"
+    default: "false"
+  exclude:
+    description: zip から除外するパス（plugin-path からの相対、改行区切り）
+    default: |
+      .github
+  create-release:
+    description: "false のとき zip を作るだけで Release は作らない"
+    default: "true"
+  skip-if-exists:
+    description: "true のとき同じタグの Release が既にあれば何もしない（false なら asset を上書き）"
+    default: "true"
+  prerelease:
+    description: Release を prerelease にする
+    default: "false"
+  output-dir:
+    description: zip の出力先
+    default: "dist"
+  github-token:
+    description: Release 作成に使うトークン（contents:write が必要）
+    default: ${{ github.token }}
+
+outputs:
+  tag:
+    description: 使用したタグ
+    value: ${{ steps.bundle.outputs.tag }}
+  version:
+    description: 使用したバージョン
+    value: ${{ steps.bundle.outputs.version }}
+  plugin-zip:
+    description: プラグイン全体 zip のパス
+    value: ${{ steps.bundle.outputs.plugin-zip }}
+  skills-zip:
+    description: skills のみ zip のパス（skills が無ければ空）
+    value: ${{ steps.bundle.outputs.skills-zip }}
+  released:
+    description: 今回 Release を作成・更新したら true
+    value: ${{ steps.release.outputs.released || 'false' }}
+
+runs:
+  using: composite
+  steps:
+    - id: bundle
+      shell: bash
+      env:
+        INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
+        INPUT_SKILLS_PATH: ${{ inputs.skills-path }}
+        INPUT_NAME: ${{ inputs.name }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_PER_SKILL: ${{ inputs.per-skill }}
+        INPUT_EXCLUDE: ${{ inputs.exclude }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output-dir }}
+        REPO_NAME: ${{ github.event.repository.name }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/bundle.sh"
+
+    - id: release
+      if: inputs.create-release == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        GH_REPO: ${{ github.repository }}
+        TAG: ${{ steps.bundle.outputs.tag }}
+        TARGET: ${{ github.sha }}
+        ASSETS_DIR: ${{ steps.bundle.outputs.assets-dir }}
+        SKIP_IF_EXISTS: ${{ inputs.skip-if-exists }}
+        PRERELEASE: ${{ inputs.prerelease }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/release.sh"
